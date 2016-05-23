@@ -21,6 +21,14 @@ func main() {
 	}
 	host := flag.Args()[0]
 
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		log.Fatalf("Failed to look up host IP: %v", err)
+	}
+	if len(ips) == 0 {
+		log.Fatalf("Got no IPs for host: %v", host)
+	}
+
 	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
 	if err != nil {
 		log.Fatal(err)
@@ -40,14 +48,6 @@ func main() {
 		wb, err := wm.Marshal(nil)
 		if err != nil {
 			log.Fatal(err)
-		}
-
-		ips, err := net.LookupIP(host)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if len(ips) == 0 {
-			log.Fatalf("Could not resolve IP for %v", host)
 		}
 
 		if _, err = conn.WriteTo(wb, &net.UDPAddr{IP: ips[0], Port: 80}); err != nil {
