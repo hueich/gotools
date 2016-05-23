@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 var (
@@ -57,6 +58,7 @@ func main() {
 			log.Fatal(err)
 		}
 
+		start := time.Now()
 		if _, err = conn.WriteTo(wb, &net.UDPAddr{IP: ips[0], Port: 80}); err != nil {
 			log.Fatal(err)
 		}
@@ -66,6 +68,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		elapsed := time.Since(start)
 
 		rm, err := icmp.ParseMessage(1, rb[:n])
 		if err != nil {
@@ -75,7 +78,7 @@ func main() {
 		switch rm.Type {
 		case ipv4.ICMPTypeEchoReply:
 			b := rm.Body.(*icmp.Echo)
-			fmt.Printf("%d bytes from %s: seq=%d ttl=%d time=%.3f ms\n", n, strings.Split(dst.String(), ":")[0], b.Seq, 0, 0.0)
+			fmt.Printf("%d bytes from %s: seq=%d time=%.3f ms\n", n, strings.Split(dst.String(), ":")[0], b.Seq, elapsed.Seconds()*1000)
 
 			if *debug {
 				log.Printf("%+v", b)
