@@ -6,10 +6,11 @@ import (
 	"golang.org/x/net/ipv4"
 	"log"
 	"net"
+	"os"
 )
 
 var (
-	count = flag.Uint("c", 0, "Number of pings to send. If count is 0, will ping forever.")
+	count = flag.Int("c", 0, "Number of pings to send. If count is 0 or negative, will ping forever.")
 )
 
 func main() {
@@ -26,13 +27,13 @@ func main() {
 	}
 	defer conn.Close()
 
-	for cnt := *count; *count == 0 || cnt > 0; cnt-- {
+	for seq := 0; *count <= 0 || seq < *count; seq++ {
 		wm := &icmp.Message{
 			Type: ipv4.ICMPTypeEcho,
 			Code: 0,
 			Body: &icmp.Echo{
-				ID:   1234,
-				Seq:  1,
+				ID:   os.Getpid() & 0xffff,
+				Seq:  seq,
 				Data: []byte("FOO"),
 			},
 		}
@@ -68,6 +69,7 @@ func main() {
 		case ipv4.ICMPTypeEchoReply:
 			log.Printf("Got reply from %v", dst)
 			b := rm.Body.(*icmp.Echo)
+			log.Printf("%+v", b)
 			log.Printf("Data: %q", b.Data)
 		default:
 			log.Printf("Got something else: %+v", rm)
