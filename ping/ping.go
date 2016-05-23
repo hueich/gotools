@@ -2,15 +2,20 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 var (
 	count = flag.Int("c", 0, "Number of pings to send. If count is 0 or negative, will ping forever.")
+	debug = flag.Bool("debug", false, "Show debug info.")
+
+	data = []byte("FOO")
 )
 
 func main() {
@@ -35,6 +40,8 @@ func main() {
 	}
 	defer conn.Close()
 
+	fmt.Printf("PING %s (%s): %d data bytes\n", host, ips[0].String(), len(data))
+
 	for seq := 0; *count <= 0 || seq < *count; seq++ {
 		wm := &icmp.Message{
 			Type: ipv4.ICMPTypeEcho,
@@ -42,7 +49,7 @@ func main() {
 			Body: &icmp.Echo{
 				ID:   os.Getpid() & 0xffff,
 				Seq:  seq,
-				Data: []byte("FOO"),
+				Data: data,
 			},
 		}
 		wb, err := wm.Marshal(nil)
@@ -67,12 +74,17 @@ func main() {
 
 		switch rm.Type {
 		case ipv4.ICMPTypeEchoReply:
-			log.Printf("Got reply from %v", dst)
 			b := rm.Body.(*icmp.Echo)
-			log.Printf("%+v", b)
-			log.Printf("Data: %q", b.Data)
+			fmt.Printf("%d bytes from %s: seq=%d ttl=%d time=%.3f ms\n", n, strings.Split(dst.String(), ":")[0], b.Seq, 0, 0.0)
+
+			if *debug {
+				log.Printf("%+v", b)
+				log.Printf("Data: %q", b.Data)
+			}
 		default:
-			log.Printf("Got something else: %+v", rm)
+			if *debug {
+				log.Printf("Got something else: %+v", rm)
+			}
 		}
 	}
 }
