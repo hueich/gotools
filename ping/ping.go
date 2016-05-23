@@ -59,7 +59,7 @@ func main() {
 		}
 
 		start := time.Now()
-		if _, err = conn.WriteTo(wb, &net.UDPAddr{IP: ips[0], Port: 80}); err != nil {
+		if _, err = conn.WriteTo(wb, &net.UDPAddr{IP: ips[0]}); err != nil {
 			log.Fatal(err)
 		}
 
