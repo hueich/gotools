@@ -102,3 +102,13 @@ func main() {
 		}
 	}
 }
+
+func pickIP(ips []net.IP, ver int) net.IP {
+	for _, ip := range ips {
+		isV4 := ip.To4() != nil
+		if ver == ipv4.Version && isV4 || ver == ipv6.Version && !isV4 {
+			return ip
+		}
+	}
+	return nil
+}
