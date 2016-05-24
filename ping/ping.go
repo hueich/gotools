@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 	"log"
 	"net"
 	"os"
@@ -13,14 +14,23 @@ import (
 )
 
 var (
-	count = flag.Int("c", 0, "Number of pings to send. If count is 0 or negative, will ping forever.")
-	debug = flag.Bool("debug", false, "Show debug info.")
+	count   = flag.Int("c", 0, "Number of pings to send. If count is 0 or negative, will ping forever.")
+	version = flag.Int("v", 4, "Version of IP address to use when looking up the hostname, either 4 or 6 for IPv4 or IPv6, respectively. Other values not supported.")
+	debug   = flag.Bool("debug", false, "Show debug info.")
 
 	data = []byte("FOO")
 )
 
 func main() {
 	flag.Parse()
+
+	switch *version {
+	case ipv4.Version:
+	case ipv6.Version:
+		break
+	default:
+		log.Fatal("IP version must be either 4 or 6.")
+	}
 
 	if len(flag.Args()) < 1 {
 		log.Fatal("Must provide target host.")
@@ -34,6 +44,7 @@ func main() {
 	if len(ips) == 0 {
 		log.Fatalf("Got no IPs for host: %v", host)
 	}
+	log.Printf("IPs: %v", ips)
 
 	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
 	if err != nil {
