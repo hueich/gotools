@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"reflect"
 	"time"
 )
 
@@ -98,7 +97,7 @@ func main() {
 		elapsed := time.Since(start)
 
 		if *debug {
-			log.Printf("dest: (%s) %s\n", reflect.TypeOf(dest), dest.String())
+			log.Printf("dest: %s", dest.String())
 		}
 
 		rm, err := icmp.ParseMessage(1, rb[:n])
