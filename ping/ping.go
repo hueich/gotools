@@ -13,11 +13,13 @@ import (
 )
 
 var (
-	count   = flag.Int("c", 0, "Number of pings to send. If count is 0 or negative, will ping forever.")
-	version = flag.Int("v", 4, "Version of IP address to use when looking up the hostname, either 4 or 6 for IPv4 or IPv6, respectively. Other values not supported.")
-	debug   = flag.Bool("debug", false, "Show debug info.")
+	count    = flag.Int("c", 0, "Number of pings to send. If count is 0 or negative, will ping forever.")
+	version  = flag.Int("v", 4, "Version of IP address to use when looking up the hostname, either 4 or 6 for IPv4 or IPv6, respectively. Other values not supported.")
+	interval = flag.Duration("i", 1*time.Second, "Interval of time between pings. Specified as a decimal number followed by units of time, e.g. 1.5s, 200ms, etc.")
+	debug    = flag.Bool("debug", false, "Show debug info.")
 
 	data = []byte("FOO")
+	buf  = make([]byte, 1500)
 )
 
 func main() {
@@ -67,63 +69,80 @@ func main() {
 	}
 	defer conn.Close()
 
+	addr := &net.UDPAddr{IP: ip}
+
 	fmt.Printf("PING %s (%s): %d data bytes\n", host, ip.String(), len(data))
 
-	for seq := 0; *count <= 0 || seq < *count; seq++ {
-		wm := &icmp.Message{
-			Type: echoType,
-			Code: 0,
-			Body: &icmp.Echo{
-				ID:   os.Getpid() & 0xffff,
-				Seq:  seq,
-				Data: data,
-			},
-		}
-		wb, err := wm.Marshal(nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		start := time.Now()
-		if _, err = conn.WriteTo(wb, &net.UDPAddr{IP: ip}); err != nil {
-			log.Fatal(err)
-		}
-
-		rb := make([]byte, 1500)
-		n, dest, err := conn.ReadFrom(rb)
-		if err != nil {
-			log.Fatal(err)
-		}
-		elapsed := time.Since(start)
-
-		if *debug {
-			log.Printf("dest: %s", dest.String())
-		}
-
-		rm, err := icmp.ParseMessage(1, rb[:n])
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		switch rm.Type {
-		case ipv4.ICMPTypeEchoReply, ipv6.ICMPTypeEchoReply:
-			host, _, err := net.SplitHostPort(dest.String())
-			if err != nil {
-				log.Fatal(err)
-			}
-			b := rm.Body.(*icmp.Echo)
-			fmt.Printf("%d bytes from %s: icmp_seq=%d time=%.3f ms\n", n, host, b.Seq, elapsed.Seconds()*1000)
-
-			if *debug {
-				log.Printf("%+v", b)
-				log.Printf("Data: %q", b.Data)
-			}
-		default:
-			if *debug {
-				log.Printf("Got something else: %+v", rm)
+	seq := 0
+	// Send the first ping right away, instead of waiting for the first tick.
+	if sendPing(conn, addr, echoType, data, &seq) {
+		for _ = range time.Tick(*interval) {
+			if !sendPing(conn, addr, echoType, data, &seq) {
+				break
 			}
 		}
 	}
+}
+
+// sendPing sends a ICMP echo message to the address. The function returns whether to continue sending pings.
+func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []byte, seq *int) bool {
+	wm := &icmp.Message{
+		Type: echoType,
+		Code: 0,
+		Body: &icmp.Echo{
+			ID:   os.Getpid() & 0xffff,
+			Seq:  *seq,
+			Data: data,
+		},
+	}
+	wb, err := wm.Marshal(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	start := time.Now()
+	if _, err = conn.WriteTo(wb, addr); err != nil {
+		log.Fatal(err)
+	}
+
+	n, dest, err := conn.ReadFrom(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	elapsed := time.Since(start)
+
+	if *debug {
+		log.Printf("dest: %s", dest.String())
+	}
+
+	rm, err := icmp.ParseMessage(1, buf[:n])
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	switch rm.Type {
+	case ipv4.ICMPTypeEchoReply, ipv6.ICMPTypeEchoReply:
+		host, _, err := net.SplitHostPort(dest.String())
+		if err != nil {
+			log.Fatal(err)
+		}
+		b := rm.Body.(*icmp.Echo)
+		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%.3f ms\n", n, host, b.Seq, elapsed.Seconds()*1000)
+
+		if *debug {
+			log.Printf("%+v", b)
+			log.Printf("Data: %q", b.Data)
+		}
+	default:
+		if *debug {
+			log.Printf("Got something else: %+v", rm)
+			break
+		}
+		fmt.Printf("Got a non-echo reply: %+v\n", rm)
+	}
+
+	*seq++
+	return *count <= 0 || *seq < *count
 }
 
 func pickIP(ips []net.IP, ver int) (net.IP, error) {
