@@ -18,9 +18,16 @@ var (
 	interval = flag.Duration("i", 1*time.Second, "Interval of time between pings. Specified as a decimal number followed by units of time, e.g. 1.5s, 200ms, etc.")
 	debug    = flag.Bool("debug", false, "Show debug info.")
 
-	data = []byte("FOO")
-	buf  = make([]byte, 1500)
+	data  = []byte("FOO")
+	buf   = make([]byte, 1500)
+	stats = make([]stat, 0)
 )
+
+type stat struct {
+	Seq     int
+	Lost    bool
+	Elapsed time.Duration
+}
 
 func main() {
 	flag.Parse()
@@ -46,6 +53,8 @@ func main() {
 		log.Fatal("Must provide target host.")
 	}
 	host := flag.Args()[0]
+
+	defer printStats(host, &stats)
 
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -99,6 +108,7 @@ func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []b
 	if err != nil {
 		log.Fatal(err)
 	}
+	s := stat{Seq: *seq}
 
 	start := time.Now()
 	if _, err = conn.WriteTo(wb, addr); err != nil {
@@ -110,6 +120,8 @@ func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []b
 		log.Fatal(err)
 	}
 	elapsed := time.Since(start)
+	s.Elapsed = elapsed
+	stats = append(stats, s)
 
 	if *debug {
 		log.Printf("dest: %s", dest.String())
@@ -127,7 +139,7 @@ func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []b
 			log.Fatal(err)
 		}
 		b := rm.Body.(*icmp.Echo)
-		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%.3f ms\n", n, host, b.Seq, elapsed.Seconds()*1000)
+		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%.3f ms\n", n, host, b.Seq, toMs(elapsed))
 
 		if *debug {
 			log.Printf("%+v", b)
@@ -153,4 +165,35 @@ func pickIP(ips []net.IP, ver int) (net.IP, error) {
 		}
 	}
 	return nil, fmt.Errorf("no available IPv%d address", ver)
+}
+
+func printStats(host string, stats *[]stat) error {
+	fmt.Printf("\n--- %s ping statistics ---\n", host)
+	nLost := 0
+	var min, max, sum time.Duration
+	for _, s := range *stats {
+		sum += s.Elapsed
+		if s.Elapsed > max {
+			max = s.Elapsed
+		}
+		if min == 0 || s.Elapsed < min {
+			min = s.Elapsed
+		}
+		if s.Lost {
+			nLost++
+		}
+	}
+	nSent := len(*stats)
+	nGot := nSent - nLost
+	lossRate := 0.0
+	if nSent > 0 {
+		lossRate = float64(nLost) / float64(nSent)
+	}
+	fmt.Printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n", nSent, nGot, lossRate*100)
+	avg := toMs(sum) / float64(nGot)
+	fmt.Printf("round-trip min/avg/max = %.3f/%.3f/%.3f ms\n", toMs(min), avg, toMs(max))
+	return nil
+}
+func toMs(d time.Duration) float64 {
+	return d.Seconds() * 1000
 }
