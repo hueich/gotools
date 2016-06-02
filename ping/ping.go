@@ -22,6 +22,12 @@ var (
 	buf  = make([]byte, 1500)
 )
 
+type stat struct {
+	Seq int
+	Lost bool
+	Elapsed time.Duration
+}
+
 func main() {
 	flag.Parse()
 
@@ -46,6 +52,12 @@ func main() {
 		log.Fatal("Must provide target host.")
 	}
 	host := flag.Args()[0]
+	var stats []stat
+
+	defer printStats(host, &stats)
+	// stats = append(stats, stat{Lost: true})
+	stats = append(stats, stat{})
+	stats = append(stats, stat{})
 
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -153,4 +165,29 @@ func pickIP(ips []net.IP, ver int) (net.IP, error) {
 		}
 	}
 	return nil, fmt.Errorf("no available IPv%d address", ver)
+}
+
+func printStats(host string, stats *[]stat) error {
+	fmt.Printf("\n--- %s ping statistics ---\n", host)
+	nLost := 0
+	var min, max, sum time.Duration
+	for _, s := range *stats {
+		sum += s.Elapsed
+		if s.Elapsed > max {
+			max = s.Elapsed
+		}
+		if min == 0 || s.Elapsed < min {
+			min = s.Elapsed
+		}
+		if s.Lost {
+			nLost++
+		}
+	}
+	nSent := len(*stats)
+	lossRate := 0.0
+	if nSent > 0 {
+		lossRate = float64(nLost)/float64(nSent)
+	}
+	fmt.Printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n", nSent, nSent-nLost, lossRate*100)
+	return nil
 }
