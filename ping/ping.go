@@ -56,8 +56,8 @@ func main() {
 
 	defer printStats(host, &stats)
 	// stats = append(stats, stat{Lost: true})
-	stats = append(stats, stat{})
-	stats = append(stats, stat{})
+	stats = append(stats, stat{Elapsed: 21563*time.Microsecond})
+	stats = append(stats, stat{Elapsed: 10345*time.Microsecond})
 
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -139,7 +139,7 @@ func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []b
 			log.Fatal(err)
 		}
 		b := rm.Body.(*icmp.Echo)
-		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%.3f ms\n", n, host, b.Seq, elapsed.Seconds()*1000)
+		fmt.Printf("%d bytes from %s: icmp_seq=%d time=%.3f ms\n", n, host, b.Seq, toMs(elapsed))
 
 		if *debug {
 			log.Printf("%+v", b)
@@ -184,10 +184,16 @@ func printStats(host string, stats *[]stat) error {
 		}
 	}
 	nSent := len(*stats)
+	nGot := nSent-nLost
 	lossRate := 0.0
 	if nSent > 0 {
 		lossRate = float64(nLost)/float64(nSent)
 	}
-	fmt.Printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n", nSent, nSent-nLost, lossRate*100)
+	fmt.Printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n", nSent, nGot, lossRate*100)
+	avg := toMs(sum) / float64(nGot)
+	fmt.Printf("round-trip min/avg/max = %.3f/%.3f/%.3f ms\n", toMs(min), avg, toMs(max))
 	return nil
+}
+func toMs(d time.Duration) float64 {
+	return d.Seconds()*1000
 }
