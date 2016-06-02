@@ -18,13 +18,14 @@ var (
 	interval = flag.Duration("i", 1*time.Second, "Interval of time between pings. Specified as a decimal number followed by units of time, e.g. 1.5s, 200ms, etc.")
 	debug    = flag.Bool("debug", false, "Show debug info.")
 
-	data = []byte("FOO")
-	buf  = make([]byte, 1500)
+	data  = []byte("FOO")
+	buf   = make([]byte, 1500)
+	stats = make([]stat, 0)
 )
 
 type stat struct {
-	Seq int
-	Lost bool
+	Seq     int
+	Lost    bool
 	Elapsed time.Duration
 }
 
@@ -52,12 +53,8 @@ func main() {
 		log.Fatal("Must provide target host.")
 	}
 	host := flag.Args()[0]
-	var stats []stat
 
 	defer printStats(host, &stats)
-	// stats = append(stats, stat{Lost: true})
-	stats = append(stats, stat{Elapsed: 21563*time.Microsecond})
-	stats = append(stats, stat{Elapsed: 10345*time.Microsecond})
 
 	ips, err := net.LookupIP(host)
 	if err != nil {
@@ -111,6 +108,7 @@ func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []b
 	if err != nil {
 		log.Fatal(err)
 	}
+	s := stat{Seq: *seq}
 
 	start := time.Now()
 	if _, err = conn.WriteTo(wb, addr); err != nil {
@@ -122,6 +120,8 @@ func sendPing(conn *icmp.PacketConn, addr net.Addr, echoType icmp.Type, data []b
 		log.Fatal(err)
 	}
 	elapsed := time.Since(start)
+	s.Elapsed = elapsed
+	stats = append(stats, s)
 
 	if *debug {
 		log.Printf("dest: %s", dest.String())
@@ -184,10 +184,10 @@ func printStats(host string, stats *[]stat) error {
 		}
 	}
 	nSent := len(*stats)
-	nGot := nSent-nLost
+	nGot := nSent - nLost
 	lossRate := 0.0
 	if nSent > 0 {
-		lossRate = float64(nLost)/float64(nSent)
+		lossRate = float64(nLost) / float64(nSent)
 	}
 	fmt.Printf("%d packets transmitted, %d packets received, %.1f%% packet loss\n", nSent, nGot, lossRate*100)
 	avg := toMs(sum) / float64(nGot)
@@ -195,5 +195,5 @@ func printStats(host string, stats *[]stat) error {
 	return nil
 }
 func toMs(d time.Duration) float64 {
-	return d.Seconds()*1000
+	return d.Seconds() * 1000
 }
